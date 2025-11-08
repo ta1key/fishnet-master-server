@@ -39,7 +39,7 @@ async def handler(websocket):
 
 async def main():
     async with websockets.serve(handler, "0.0.0.0", PORT):
-        print("🚀 Relay server running on port " + PORT)
+        print("🚀 Relay server running on port " + str(PORT))
         await asyncio.Future()
 
 if __name__ == "__main__":
