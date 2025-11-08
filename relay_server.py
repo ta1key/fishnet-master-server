@@ -1,46 +1,49 @@
 import asyncio
 import websockets
-import json
 import os
+import json
 
 PORT = int(os.environ.get("PORT", 10000))
+rooms = {}  # room_id -> set of websockets
 
-clients = {}  # room_id -> [websockets]
-
-async def handler(websocket):
+async def handler(ws):
     room_id = None
     try:
-        async for msg in websocket:
-            data = json.loads(msg)
-            cmd = data.get("cmd")
+        async for msg in ws:
+            try:
+                data = json.loads(msg)
+            except:
+                data = None
 
-            if cmd == "join":
+            # 部屋参加コマンド
+            if data and data.get("cmd") == "join":
                 room_id = data["room"]
-                if room_id not in clients:
-                    clients[room_id] = []
-                clients[room_id].append(websocket)
-                print(f"✅ Joined room: {room_id}")
+                if room_id not in rooms:
+                    rooms[room_id] = set()
+                rooms[room_id].add(ws)
+                print(f"🟢 Client joined room {room_id}")
                 continue
 
-            # broadcast to others
-            if room_id and room_id in clients:
-                for ws in clients[room_id]:
-                    if ws != websocket:
-                        await ws.send(msg)
+            # 部屋内の他クライアントにブロードキャスト
+            if room_id and room_id in rooms:
+                for client in rooms[room_id]:
+                    if client != ws:
+                        await client.send(msg)
 
     except Exception as e:
-        print("Error:", e)
+        print(f"⚠️ Error: {e}")
     finally:
-        if room_id and room_id in clients:
-            clients[room_id].remove(websocket)
-            if not clients[room_id]:
-                del clients[room_id]
-        print(f"❌ Disconnected from {room_id}")
+        # クライアント切断時
+        if room_id and room_id in rooms:
+            rooms[room_id].discard(ws)
+            if not rooms[room_id]:
+                del rooms[room_id]
+        print(f"🔴 Client disconnected from room {room_id}")
 
 async def main():
     async with websockets.serve(handler, "0.0.0.0", PORT):
         print("🚀 Relay server running on port " + str(PORT))
-        await asyncio.Future()
+        await asyncio.Future()  # run forever
 
 if __name__ == "__main__":
     asyncio.run(main())
