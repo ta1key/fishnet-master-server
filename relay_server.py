@@ -9,13 +9,24 @@ rooms = {}  # room_id -> set of websockets
 async def handler(ws):
     room_id = None
     try:
-        async for msg in ws:
+        while True:
+            msg = await ws.recv()
+
+            # --- 🧠 FishNetの通信は「バイナリ」 ---
+            # バイナリならそのまま中継
+            if isinstance(msg, bytes):
+                if room_id and room_id in rooms:
+                    for client in rooms[room_id]:
+                        if client != ws:
+                            await client.send(msg)
+                continue
+
+            # --- 🧠 JSONコマンド（joinなど）はテキスト ---
             try:
                 data = json.loads(msg)
             except:
                 data = None
 
-            # 部屋参加コマンド
             if data and data.get("cmd") == "join":
                 room_id = data["room"]
                 if room_id not in rooms:
@@ -23,12 +34,6 @@ async def handler(ws):
                 rooms[room_id].add(ws)
                 print(f"🟢 Client joined room {room_id}")
                 continue
-
-            # 部屋内の他クライアントにブロードキャスト
-            if room_id and room_id in rooms:
-                for client in rooms[room_id]:
-                    if client != ws:
-                        await client.send(msg)
 
     except Exception as e:
         print(f"⚠️ Error: {e}")
@@ -42,7 +47,7 @@ async def handler(ws):
 
 async def main():
     async with websockets.serve(handler, "0.0.0.0", PORT):
-        print("🚀 Relay server running on port " + str(PORT))
+        print(f"🚀 Relay server running on port {PORT}")
         await asyncio.Future()  # run forever
 
 if __name__ == "__main__":
